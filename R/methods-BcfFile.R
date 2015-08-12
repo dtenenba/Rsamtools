@@ -1,5 +1,5 @@
 BcfFile <-
-    function(file, index=file,
+    function(file, index=sprintf("%s.csi", file),
              mode=ifelse(grepl("\\.bcf$", file), "rb", "r"))
 {
     bf <- .RsamtoolsFile(.BcfFile, file, index)

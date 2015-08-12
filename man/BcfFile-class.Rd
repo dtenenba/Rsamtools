@@ -33,7 +33,7 @@
 
 ## Constructors
 
-BcfFile(file, index = file,
+BcfFile(file, index = sprintf("\%s.csi", file),
         mode=ifelse(grepl("\\\\.bcf$", file), "rb", "r"))
 BcfFileList(...)
 
@@ -130,6 +130,10 @@ bcfMode(object)
 
   }
 
+}
+\note{
+  HTSlib does not support '.bci' indexes; re-index with
+  \code{indexBcf()}.
 }
 \author{Martin Morgan}
 

@@ -27,7 +27,7 @@
   Use \code{ScanBcfParam()} to create a parameter object influencing the
   \sQuote{INFO} and \sQuote{GENO} fields parsed, and which sample records are
   imported from a BCF file. Use of \code{which} requires that a BCF
-  index file (\code{<filename>.bci}) exists.
+  index file (\code{<filename>.csi}) exists.
 
 }
 
