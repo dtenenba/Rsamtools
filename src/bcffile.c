@@ -99,6 +99,12 @@ SEXP bcffile_open(SEXP filename, SEXP indexname, SEXP filemode)
             Free(bfile);
             Rf_error("'open' BCF failed\n  filename: %s", cfile);
         }
+        if (bfile->file->format.format != vcf &&
+            bfile->file->format.format != bcf) {
+            vcf_close(bfile->file);
+            Free(bfile);
+            Rf_error("'open' BCF / VCF failed: incorrect file type?");
+        }
     }
 
     bfile->index = NULL;
@@ -280,10 +286,10 @@ static void _bcf_gi2sxp(SEXP geno, const int i_rec, const bcf_hdr_t * h,
 SEXP scan_bcf_header(SEXP ext)
 {
     _checkext(ext, BCFFILE_TAG, "scanBcfHeader");
-    vcfFile *bcf = BCFFILE(ext)->file;
-    if (bcf->format.format != vcf && 0 != bgzf_seek(bcf->fp.bgzf, 0, SEEK_SET))
+    vcfFile *bf = BCFFILE(ext)->file;
+    if (bf->format.format != vcf && 0 != bgzf_seek(bf->fp.bgzf, 0, SEEK_SET))
         Rf_error("internal: failed to 'seek'");
-    bcf_hdr_t *hdr = bcf_hdr_read(bcf);
+    bcf_hdr_t *hdr = bcf_hdr_read(bf);
     if (NULL == hdr)
         Rf_error("no 'header' line \"#CHROM POS ID...\"?");
 
@@ -305,7 +311,7 @@ SEXP scan_bcf_header(SEXP ext)
     x = VECTOR_ELT(ans, BCF_HDR_HEADER);
 
     int hdrlen = 0;
-    char *hdr_text = bcf_hdr_fmt_text(hdr, 1, &hdrlen);
+    char *hdr_text = bcf_hdr_fmt_text(hdr, bf->format.format == bcf, &hdrlen);
     const char *s;
     if (hdrlen > 0) {
         char *txt = (char *) R_alloc(hdrlen+1, sizeof(char));
