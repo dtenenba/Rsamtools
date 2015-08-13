@@ -281,7 +281,7 @@ SEXP scan_bcf_header(SEXP ext)
 {
     _checkext(ext, BCFFILE_TAG, "scanBcfHeader");
     vcfFile *bcf = BCFFILE(ext)->file;
-    if (!bcf->format.format != vcf && 0 != bgzf_seek(bcf->fp.bgzf, 0, SEEK_SET))
+    if (bcf->format.format != vcf && 0 != bgzf_seek(bcf->fp.bgzf, 0, SEEK_SET))
         Rf_error("internal: failed to 'seek'");
     bcf_hdr_t *hdr = bcf_hdr_read(bcf);
     if (NULL == hdr)
@@ -289,8 +289,6 @@ SEXP scan_bcf_header(SEXP ext)
 
     int nseqs = 0;
     const char **seqnames = bcf_hdr_seqnames(hdr, &nseqs);
-    if(nseqs < 1)
-        Rf_error("header contains no seqname info");
 
     SEXP ans = PROTECT(NEW_LIST(BCF_HDR_LAST));
     SET_VECTOR_ELT(ans, BCF_HDR_REF, NEW_STRING(nseqs));
