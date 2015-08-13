@@ -46,7 +46,7 @@ SEXP tabixfile_open(SEXP filename, SEXP indexname)
     tfile->tabix = tbx_index_load(translateChar(STRING_ELT(filename, 0)));
     if (NULL == tfile->tabix) {
         Free(tfile);
-        Rf_error("failed to open file");
+        Rf_error("failed to open tabix index file");
     }
     tfile->iter = NULL;
     tfile->fp = hts_open(translateChar(STRING_ELT(filename, 0)), "r");
@@ -152,43 +152,33 @@ const char *_tabix_read(htsFile *fp, tbx_t *t, hts_itr_t *iter)
  * bgzf member of the htsFile::fp union member. Therefore, (1) open
  * the file in question again, (2) read the header lines, and (3)
  * close--never affecting the original htsFile parameter */
-SEXP _header_lines(tbx_t * tabix, const tbx_conf_t * conf, htsFile *origHts)
+SEXP _header_lines(htsFile *fp_orig, const tbx_conf_t * conf)
 {
     const int GROW_BY = 100;
     SEXP lns;
     int i_lns = 0, pidx;
 
-    htsFile *forHeader = hts_open(origHts->fn, "r");
-    if(forHeader == NULL)
-        Rf_error("Failed to open tabix file to grab header info");
-
-    hts_itr_t *iter = tbx_itr_queryi(tabix, HTS_IDX_START, 0, 0);
-    const char *s;
-
-    if (NULL == iter)
-        Rf_error("failed to create tabix iterator");
+    htsFile *fp = hts_open(fp_orig->fn, "r");
+    if (fp == NULL)
+        Rf_error("failed to open tabix file to read header lines");
 
     PROTECT_WITH_INDEX(lns = NEW_CHARACTER(0), &pidx);
-    while (NULL != (s = _tabix_read(forHeader, tabix, iter))) {
-        if ((int) (*s) != conf->meta_char) {
-            free((char*) s);
-            s = NULL;
+
+    kstring_t str = {0, 0, 0};
+    while (hts_getline(fp, '\n', &str) >= 0) {
+        if (str.l != 0 && str.s[0] != conf->meta_char)
             break;
-        }
         if (0 == (i_lns % GROW_BY)) {
             lns = Rf_lengthgets(lns, Rf_length(lns) + GROW_BY);
             REPROTECT(lns, pidx);
         }
-        SET_STRING_ELT(lns, i_lns++, mkChar(s));
-        free((char*) s);
-        s = NULL;
+        SET_STRING_ELT(lns, i_lns++, mkCharLen(str.s, str.l));
     }
 
-    tbx_itr_destroy(iter);
-    hts_close(forHeader);
-
+    free(str.s);
     lns = Rf_lengthgets(lns, i_lns);
     UNPROTECT(1);
+    hts_close(fp);
 
     return lns;
 }
@@ -246,7 +236,7 @@ SEXP header_tabix(SEXP ext)
     SET_VECTOR_ELT(result, 3, ScalarString(mkChar(comment)));
 
     /* header lines */
-    SET_VECTOR_ELT(result, 4, _header_lines(tabix, conf, hts));
+    SET_VECTOR_ELT(result, 4, _header_lines(hts, conf));
 
     UNPROTECT(1);
     return result;
