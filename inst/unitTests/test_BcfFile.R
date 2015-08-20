@@ -87,7 +87,7 @@ test_BcfFile_scanBcfHeader_no_header_line <- function()
     tryCatch(scanBcfHeader(fl), error=function(err) {
         msg <<- conditionMessage(err)
     })
-    checkIdentical("no 'header' line \"#CHROM POS ID...\"?", msg)
+    checkIdentical("'open' BCF / VCF failed: incorrect file type?", msg)
 }
 
 test_BcfFile_scan_noindex <- function()
