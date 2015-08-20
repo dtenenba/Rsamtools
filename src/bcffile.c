@@ -291,7 +291,7 @@ SEXP scan_bcf_header(SEXP ext)
         Rf_error("internal: failed to 'seek'");
     bcf_hdr_t *hdr = bcf_hdr_read(bf);
     if (NULL == hdr)
-        Rf_error("no 'header' line \"#CHROM POS ID...\"?");
+        Rf_error("'scan(BV)cfHeader()' failed to read header; invalid file?");
 
     int nseqs = 0;
     const char **seqnames = bcf_hdr_seqnames(hdr, &nseqs);
@@ -335,9 +335,13 @@ SEXP scan_bcf_header(SEXP ext)
     return ans;
 }
 
-int scan_bcf_range(vcfFile * bcf, bcf_hdr_t * hdr, SEXP ans,
-                   hts_itr_t *iter, int n)
+int scan_bcf_range(vcfFile* bcf, bcf_hdr_t * hdr, hts_idx_t *idx,
+                   SEXP ans, int tid, int start, int end, int n)
 {
+    hts_itr_t *iter = NULL;
+    if (tid != -1)
+        iter = bcf_itr_queryi(idx, tid, start == 0 ? 0 : start - 1, end);
+
     bcf1_t *bcf1 = bcf_init1();
     if (NULL == bcf1)
         Rf_error("scan_bcf_region: failed to allocate memory");
@@ -345,7 +349,25 @@ int scan_bcf_range(vcfFile * bcf, bcf_hdr_t * hdr, SEXP ans,
     int res;
 
     kstring_t formatted_line = { 0, 0, NULL };
-    while (0 <= (res = bcf_itr_next(bcf, iter, bcf1))) {
+
+    while (TRUE) {
+        if (NULL == iter) {      /* read versus iterate */
+            res = bcf_read(bcf, hdr, bcf1);
+            if (res < 0)
+                break;
+            if (tid >= 0) {
+                int pos = bcf1->pos + (bcf1->rlen == 0 ? 0 : 1);
+                if (bcf1->rid != tid || bcf1->pos > end)
+                    break;
+                if (!(pos >= start && end > bcf1->pos))
+                    continue;
+            }
+        } else {
+            res = bcf_itr_next(bcf, iter, bcf1);
+            if (res < 0)
+                break;
+        }
+
         formatted_line.l = 0; /* zero the length of the line */
 
         /* vcf_format has bcf_unpack side-effect */
@@ -412,6 +434,8 @@ int scan_bcf_range(vcfFile * bcf, bcf_hdr_t * hdr, SEXP ans,
     }
     free(formatted_line.s);
     bcf_destroy(bcf1);
+    if (NULL != iter)
+        hts_itr_destroy(iter);
     return n;
 }
 
@@ -434,9 +458,7 @@ SEXP scan_bcf(SEXP ext, SEXP space, SEXP tmpl)
         SET_VECTOR_ELT(tmpl, BCF_RECS_PER_RANGE, NEW_INTEGER(1));
         /* HTS_IDX_START signals the iterator to read the entire file
          * (i.e., don't care about ranges) */
-        hts_itr_t *iter = bcf_itr_queryi(idx, HTS_IDX_START, -1, -1);
-        n = scan_bcf_range(bcf, hdr, tmpl, iter, n);
-        bcf_itr_destroy(iter);
+        n = scan_bcf_range(bcf, hdr, idx, tmpl, -1, -1, -1, n);
         INTEGER(VECTOR_ELT(tmpl, BCF_RECS_PER_RANGE))[0] = n;
     } else {
         SEXP spc = VECTOR_ELT(space, 0);
@@ -446,15 +468,12 @@ SEXP scan_bcf(SEXP ext, SEXP space, SEXP tmpl)
         SEXP nrec = NEW_INTEGER(nspc);
         SET_VECTOR_ELT(tmpl, BCF_RECS_PER_RANGE, nrec);
 
-        hts_itr_t *iter = NULL;
         for (int i = 0; i < nspc; ++i) {
             int tid = bcf_hdr_name2id(hdr, CHAR(STRING_ELT(spc, i)));
-            if (tid < 0) {
+            if (tid < 0)
                 Rf_error("'space' not in file: %s", CHAR(STRING_ELT(spc, i)));
-            }
-            iter = bcf_itr_queryi(idx, tid, start[i], end[i]);
-            n = scan_bcf_range(bcf, hdr, tmpl, iter, n);
-            bcf_itr_destroy(iter);
+
+            n = scan_bcf_range(bcf, hdr, idx, tmpl, tid, start[i], end[i], n);
             if (i == 0)
                 INTEGER(nrec)[i] = n;
             else
