@@ -51,7 +51,7 @@ public:
                      int32_t tid, int32_t beg, int32_t end) :
         BamIterator(bfile, bindex), tid(tid), beg(beg), end(end)
     {
-	iter = bam_itr_queryi(bindex, tid, beg, end);
+	iter = bam_itr_queryi(bindex, tid, beg == 0 ? 0 : beg - 1, end);
     }
 
     ~BamRangeIterator() {

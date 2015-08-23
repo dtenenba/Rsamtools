@@ -234,11 +234,19 @@ int _samread(BAM_FILE bfile, BAM_DATA bd, const int yieldSize,
              bam_fetch_f parse1)
 {
     int yield = 0, status = 1, bufsize = 1000;
+    int use_buffer = TRUE, parsed = TRUE;
     char *last_qname = Calloc(bufsize, char);
-    bam1_t *bam = bam_init1();
     bam_hdr_t *header = bfile->header;
 
-    while (sam_read1(bfile->file, header, bam) >= 0) {
+    if (bfile->bam1_buffer == NULL) {
+        use_buffer = FALSE;
+        bfile->bam1_buffer = bam_init1();
+    }
+    bam1_t *bam = bfile->bam1_buffer;
+
+    while (use_buffer || (sam_read1(bfile->file, header, bam) >= 0)) {
+        use_buffer = FALSE;
+        parsed = FALSE;
         if (NA_INTEGER != yieldSize) {
             if (bd->obeyQname)
                 status = check_qname(last_qname, bufsize, bam, 
@@ -248,22 +256,24 @@ int _samread(BAM_FILE bfile, BAM_DATA bd, const int yieldSize,
         }
  
         int result = parse1(bam, bd);
+        parsed = TRUE;
         if (result < 0) {   /* parse error: e.g., cigar buffer overflow */
             bam_destroy1(bam);
+            bfile->bam1_buffer = NULL;
             Free(last_qname);
             return yield;
         } else if (result == 0L) /* does not pass filter */
             continue;
 
         yield += status;
-        if (NA_INTEGER != yieldSize && yield == yieldSize) { 
-            bfile->pos0 = bgzf_tell(bfile->file->fp.bgzf);
-            if (!bd->obeyQname) 
-                break;
-        }
+        if (NA_INTEGER != yieldSize && yield == yieldSize && !bd->obeyQname)
+            break;
     }
 
-    bam_destroy1(bam);
+    if (parsed) {
+        bam_destroy1(bam);
+        bfile->bam1_buffer = NULL;
+    }
     Free(last_qname);
     return yield;
 }
@@ -288,11 +298,8 @@ int _samread_mate(BAM_FILE bfile, BAM_DATA bd, const int yieldSize,
             continue;
 
         yield += 1;
-        if (NA_INTEGER != yieldSize && yield == yieldSize) { 
-            bfile->pos0 = bgzf_tell(bfile->file->fp.bgzf);
+        if (NA_INTEGER != yieldSize && yield == yieldSize)
             break;
-        }
-
     }
 
     bam_mates_destroy(bam_mates);
@@ -314,8 +321,6 @@ static int _scan_bam_all(BAM_DATA bd, bam_fetch_f parse1,
     }
 
     /* end-of-file */
-    if ((NA_INTEGER == yieldSize) || (yield < yieldSize))
-        bfile->pos0 = bgzf_tell(bfile->file->fp.bgzf);
     if ((NULL != finish1) && (bd->iparsed >= 0))
         (*finish1) (bd);
 

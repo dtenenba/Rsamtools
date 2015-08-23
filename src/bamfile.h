@@ -16,7 +16,7 @@ typedef struct {
     samFile *file;
     bam_hdr_t *header;
     hts_idx_t *index;
-    uint64_t pos0;
+    bam1_t *bam1_buffer;
     int irange0;
     bam_mate_iter_t iter;
     void *pbuffer; /* for buffered pileup */

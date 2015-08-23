@@ -58,10 +58,13 @@ static void _bamfile_close(SEXP ext)
         bam_mate_iter_destroy(bfile->iter);
     if (NULL != bfile->pbuffer)
         pileup_pbuffer_destroy(bfile->pbuffer);
+    if (NULL != bfile->bam1_buffer)
+        bam_destroy1(bfile->bam1_buffer);
     bfile->file = NULL;
     bfile->header = NULL;
     bfile->index = NULL;
     bfile->iter = NULL;
+    bfile->bam1_buffer = NULL;
 }
 
 static void _bamfile_finalizer(SEXP ext)
@@ -84,7 +87,7 @@ static BAM_FILE _bamfile_open_r(SEXP filename, SEXP indexname, SEXP filemode)
 {
     BAM_FILE bfile = (BAM_FILE) Calloc(1, _BAM_FILE);
 
-    bfile->file = NULL, bfile->header = NULL;
+    bfile->file = NULL, bfile->header = NULL, bfile->bam1_buffer = NULL;
     if (0 != Rf_length(filename)) {
         const char *cfile = translateChar(STRING_ELT(filename, 0));
         bfile->file = _bam_tryopen(cfile, CHAR(STRING_ELT(filemode, 0)));
@@ -94,7 +97,6 @@ static BAM_FILE _bamfile_open_r(SEXP filename, SEXP indexname, SEXP filemode)
             Free(bfile);
             Rf_error("'filename' is not a BAM file\n  file: %s", cfile);
         }
-        bfile->pos0 = bgzf_tell(bfile->file->fp.bgzf);
         bfile->irange0 = 0;
 
         /* try reading header */
@@ -133,7 +135,6 @@ static BAM_FILE _bamfile_open_w(SEXP file0, SEXP file1)
 
     bfile = (BAM_FILE) Calloc(1, _BAM_FILE);
     bfile->file = outfile;
-    bfile->pos0 = bgzf_tell(bfile->file->fp.bgzf);
     bfile->irange0 = 0;
 
     return bfile;
