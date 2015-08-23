@@ -7,14 +7,6 @@ test_FaFile_openclose <- function()
     checkIdentical(TRUE, isOpen(open(fa)))
     checkIdentical(FALSE, isOpen(close(fa)))
 }
-
-test_FaFile_emptyfile <- function()
-{
-    fl <- tempfile()
-    file.create(fl)
-    checkException(suppressWarnings(open(fa <- FaFile(fl))),
-                   silent=TRUE)
-}
     
 test_FaFile_emptyid <- function()
 {
